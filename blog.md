@@ -16,7 +16,7 @@ You likely won't ever be fully confident that your manual or scripted load tests
 - **Live Traffic:**
   If we were to test with live traffic, we would know that our tests throughput and request diversity were exactly* as they would really be for that period. GoReplay allows us to capture and replay traffic that was intended for our production infrastructure to our testing infrastructure. You can even modify our throughput with GoReplay by capturing live requests to a file, then replaying them later at a modified speed, or rate limit the replayed traffic (unfortunately this wasn't applicable for us as our application is time sensitive).
   
-  \* - As mentioned by Adam in his post, it's imperative to ensure that your test servers won't produce damaging side effects as a result of them receiving live traffic. Our application ties in with many external services, payment providers for example, that could have disastrous side effects if triggered in two different instances. Unfortunately, protecting against these side effects is likely to have any requests that call them fail faster, using less resources.
+  \*As mentioned by Adam in his post, it's imperative to ensure that your test servers won't produce damaging side effects as a result of them receiving live traffic. Our application ties in with many external services, payment providers for example, that could have disastrous side effects if triggered in two different instances. Unfortunately, protecting against these side effects is likely to have any requests that call them fail faster, using less resources.
 
 ## Installing and running GoReplay
 As mentioned in Adam's post, we installed GoReplay on two HAProxy instances in order to intercept and replay the traffic. Note that these are Linux machines. As far as I can tell, [the Windows flavour](https://github.com/buger/goreplay/wiki/Running-on-Windows) of GoReplay appears to suffer as a result of having to support Windows. 
@@ -42,9 +42,11 @@ Where:
 - `&` runs the process in the background. So that we can continue to use the shell while we run GoReplay.
 
 We also wanted to replicate HTTPS traffic, but this proved to be a bit more problematic. [GoReplay can't simply replay encrypted requests](https://github.com/buger/goreplay/issues/529), so we had to modify our HAProxy config with this in mind. The HTTP portion of our HAProxy config looks like this:
+
 ![HAProxy HTTP Setup](HAProxy_HTTP.png "HAProxy HTTP Setup")
 
-However, we had to modify the HTTPs config to look like this:
+However, we had to modify the HTTPS config to look like this:
+
 ![HAProxy HTTPS Setup](HAProxy_HTTPS.png "HAProxy HTTPS Setup")
 
 By decrypting the traffic in the SSL frontend, then outputting the decrypted traffic to an intermediate port, we can configure GoReplay to listen to the intermediate port and replay the traffic to the test servers. The intermediate frontend then routes the traffic to the SSL backend as the SSL frontend did before. So we've effectively looped the traffic back into HAProxy to allow GoReplay to listen unencrypted traffic.
