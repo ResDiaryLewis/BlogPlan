@@ -1,4 +1,4 @@
-My team lead, Adam, [wrote a blog](https://medium.com/resdiary-product-team/resdiary-au-azure-migration-5c1bc13b201d) recently concerning how we migrated our AU servers from RackSpace to Azure. In that post (underneath him calling me out), he mentioned how important it was for us to gauge how our new infrastructure would compare to the current infrastructure. This post will elaborate slightly on our load testing strategy and experience using [GoReplay](https://goreplay.org/), as well as some details on using GoReplay middleware. This post won't cover how GoReplay compares to the plethora of other load testing tools available.
+My team lead, Adam, [wrote a blog](https://medium.com/resdiary-product-team/resdiary-au-azure-migration-5c1bc13b201d) recently concerning how we migrated our AU servers from RackSpace to Azure. In that post (underneath him calling me out), he mentioned how important it was for us to gauge how our new infrastructure would compare to the current infrastructure. This post will describe our experience using [GoReplay](https://goreplay.org/) - a load testing tool that can replicate real traffic.
 
 The ultimate goal of our load testing was to migrate to a set of infrastructure (loadbalancers, virtual machines, database, and caches) which could handle our expected traffic. It's always better to be cautious, adding slightly more capacity than you'll ever expect to need - despite this incurring additional expenses. More often than not, you'll deliberately over provision your infrastructure and plan to scale down in the future. However, if you have confidence in your test data you can avoid the hassle of this by getting it right the first time. The accuracy of your test data will depend on the strategy and tools that you decide to use.
 
@@ -42,7 +42,7 @@ We also wanted to replicate HTTPS traffic, but this proved to be a bit more prob
 
 By decrypting the traffic in the SSL frontend, then outputting the decrypted traffic to an intermediate port, we can configure GoReplay to listen to the intermediate port and replay the traffic to the test servers. The intermediate frontend then routes the traffic to the SSL backend as the SSL frontend did before. So we've effectively looped the traffic back into HAProxy to allow GoReplay to listen unencrypted traffic.
 
-Here's an example of this in code:
+Here's an example of this in a HAProxy `.cfg` file:
 ```
 frontend ssl
     # Listen to port 443 and decrypt traffic
