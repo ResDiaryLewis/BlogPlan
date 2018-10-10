@@ -6,6 +6,7 @@
         "goreplay",
         "haproxy",
         "nohup",
-        "sprintf"
+        "sprintf",
+        "sslv"
     ]
 }
