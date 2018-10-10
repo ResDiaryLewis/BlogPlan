@@ -1,4 +1,4 @@
-My team lead, Adam, [wrote a blog](https://medium.com/resdiary-product-team/resdiary-au-azure-migration-5c1bc13b201d) recently concerning how we migrated our AU servers from RackSpace to Azure. In that post (underneath him calling me out), he mentioned how important it was for us to gauge how our new infrastructure would compare to the current infrastructure. This post will describe our experience using [GoReplay](https://goreplay.org/) - a load testing tool that can replicate real traffic.
+My team lead, Adam, [wrote a blog](https://medium.com/resdiary-product-team/resdiary-au-azure-migration-5c1bc13b201d) recently concerning how we migrated our AU servers from RackSpace to Azure. In that post (underneath him calling me out), he mentioned how important it was for us to gauge how our new infrastructure would compare to the current infrastructure. This post will describe our experience using [GoReplay](https://goreplay.org/) - a load testing tool that can replicate real traffic which we adopted as our primary tool for these load tests.
 
 The ultimate goal of our load testing was to migrate to a set of infrastructure (loadbalancers, virtual machines, database, and caches) which could handle our expected traffic. It's always better to be cautious, adding slightly more capacity than you'll ever expect to need - despite this incurring additional expenses. More often than not, you'll deliberately over provision your infrastructure and plan to scale down in the future. However, if you have confidence in your test data you can avoid the hassle of this by getting it right the first time. The accuracy of your test data will depend on the strategy and tools that you decide to use.
 
@@ -6,7 +6,7 @@ Scripted tests can typically provide as high a throughput as you desire, allowin
 
 You likely won't ever be fully confident that your manual or scripted load tests are _really_ as good as real traffic. If we were to test with live traffic, we would know that our tests throughput and request diversity were exactly* as they would really be for that period. GoReplay allows us to capture and replay traffic that was intended for our production infrastructure to our testing infrastructure. You can even modify your throughput with GoReplay by capturing live requests to a file, then replaying them later at a modified speed, or rate limit the replayed traffic (unfortunately this wasn't applicable for us as our application is time sensitive).
 
-\*As mentioned by Adam in his post, it's imperative to ensure that your test servers won't produce damaging side effects as a result of them receiving live traffic. Our application ties in with many external services, payment providers for example, that could have disastrous side effects if triggered erroneously. Unfortunately, protecting against these side effects is likely to have any requests that call them fail faster, using less resources.
+\*As mentioned by Adam in his post, it's imperative to ensure that your test servers won't produce damaging side effects as a result of them receiving live traffic. Our application ties in with many external services, payment providers for example, that could have disastrous side effects if triggered erroneously. Unfortunately, protecting against these side effects is likely to have any requests that call them fail faster. This can skew your test results, as these requests will seem less resource intensive than they would be in the live server.
 
 ## Installing and running GoReplay
 We installed GoReplay on a VM running a HAProxy load balancer in order to intercept and replay the traffic. As we were using a Linux load balancer we never tried [the Windows flavour](https://github.com/buger/goreplay/wiki/Running-on-Windows) of GoReplay, which doesn't appear to support all the functionality of the Linux version. 
@@ -42,7 +42,7 @@ We also wanted to replicate HTTPS traffic, but this proved to be a bit more prob
 
 By decrypting the traffic in the SSL frontend, then outputting the decrypted traffic to an intermediate port, we can configure GoReplay to listen to the intermediate port and replay the traffic to the test servers. The intermediate frontend then routes the traffic to the SSL backend as the SSL frontend did before. So we've effectively looped the traffic back into HAProxy to allow GoReplay to listen unencrypted traffic.
 
-Here's an example of this in a HAProxy `.cfg` file:
+Here's an example of this in a HAProxy config file:
 ```
 frontend ssl
     # Listen to port 443 and decrypt traffic
@@ -85,9 +85,9 @@ The only differences we've made to the HTTP command are:
 - We're outputting to `https://`
 - We're logging to a different file
 
+## GoReplay Middleware
 Initially, we performed a dry run of our load testing process for a short period of time during off-peak hours. This uncovered an issue with replaying live requests containing [ASPX session cookies](https://msdn.microsoft.com/en-us/library/ms178581.aspx) to the test servers. For some requests made to the live server, the application will return a [`Set-Cookie` header](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie), which instructs the users browser to assign a cookie value pair. So, if we replicate the same HTTP request between the live and test servers where they both hold distinct session IDs, we will encounter `401` response codes. _Enter GoReplay middleware_. 
 
-## GoReplay Middleware
 [Middleware](https://github.com/buger/goreplay/wiki/Middleware) allows you to modify the requests that you replay to your test servers based on the original request, original response and/or replayed response. By designing your own middleware, you can have GoReplay more effectively fulfil your needs. Middleware can take the form of any executable which reads input from `stdin` and outputs requests intended for replay to `stdout`. [A NodeJS framework](https://github.com/buger/goreplay/tree/master/middleware) is also available (which likely would have been easier to plug into than writing primitive Go code). 
 
 In this case, we can map session IDs from the live server to those from the test server, then modify replayed requests with the mapped ID. We used [this handy example](https://github.com/buger/goreplay/blob/master/examples/middleware/token_modifier.go) from the GoReplay repository to build upon.
