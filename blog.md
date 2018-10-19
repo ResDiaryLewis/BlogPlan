@@ -44,7 +44,12 @@ By decrypting the traffic in the SSL frontend, then outputting the decrypted tra
 
 Here's an example of this in a HAProxy config file:
 ```
+global
+    maxconn 20000
+
 frontend ssl
+
+    maxconn 10000
     # Listen to port 443 and decrypt traffic
     bind *:443 ssl crt /etc/haproxy/certs.d/cert.pem no-sslv3
     mode http
@@ -60,6 +65,8 @@ backend ssl_termination_backend
     server ssl_termination_server localhost:2802
 
 frontend ssl_termination_frontend
+
+    maxconn 15000
     # Listen to port 2802
     bind :2802
     mode http
@@ -76,6 +83,8 @@ backend ssl_backend
     # Output to server.com, log as http_server
     server https_server server.com:443 ssl ca-file /etc/haproxy/certs.d/cert.pem sni req.hdr(host)
 ```
+Note: we recently encountered a catastrophic error which we believe was caused employing this approach without considering how the connections would be handled in HAProxy. Since each request will create two connections in HAProxy, it's imperative that you set the `maxconn` directive in the `global` and `frontend` blocks in such a way that a connection will never be waiting for itself to finish. If a request enters the `ssl` frontend, creating an initial connection then attempts to enter the `ssl_termination` frontend creating a second connection, there could be a scenario where both connections are waiting for the other to finish. The example configuration above should guard against this by allowing more connections to enter the intermediate frontend than the initial one.
+
 Once we've setup our HAProxy config this way, we can listen to the intermediate port:
 ```shell
 sudo nohup ./goreplay --input-raw :2802 --output-http https://test.server < /dev/null > https.gor.log 2>&1 &
@@ -123,4 +132,4 @@ func sessionIDMapping(sessionID, reqID string, payloadType byte) {
 ```
 This function asynchronously handles responses or replayed responses setting session ID cookies. Since GoReplay has each triple (request, response, replayed response) share a request ID, the first response to reach the middleware can map its session ID to the request ID. When the second response arrives we then have access to both session IDs and we can map the original to the replayed session ID with the knowledge of which one is which (since the second response type is also available).
 
-Using GoReplay, we were able to accurately estimate our infrastructure requirements and highlight the flaws in our prospective setup. When the time came to flip the switch, we had confidence that we wouldn't encounter any major catastrophes as we had caught them in our load tests. Inspired by our success during this migration, we're in the process of performing similar load tests using GoReplay to aid in our UK migration to Azure (an even greater task). We're confident enough to run GoReplay totally unsupervised for days on end now. Which is necessary as our recovery period between tests is ~24 hours due to the database being far larger. My colleague Paul wrote a great blog concerning database management during these load tests, you can find that [here](). I'd like to thank him and Adam for their guidance during my first major operations project. I've learn a great deal from this experience due to their patience and knowledge.
+Using GoReplay, we were able to accurately estimate our infrastructure requirements and highlight the flaws in our prospective setup. When the time came to flip the switch, we had confidence that we wouldn't encounter any major catastrophes as we had caught them in our load tests. Inspired by our success during this migration, we're in the process of performing similar load tests using GoReplay to aid in our UK migration to Azure (an even greater task). We're confident enough to run GoReplay totally unsupervised for days on end now. Which is necessary as our recovery period between tests is ~24 hours due to the database being far larger. My colleague Paul wrote a great blog concerning database management during these load tests, you can find that [here](https://medium.com/resdiary-product-team/migrating-to-azure-sql-db-40029f271d1f). I'd like to thank him and Adam for their guidance during my first major operations project. I've learn a great deal from this experience due to their patience and knowledge.

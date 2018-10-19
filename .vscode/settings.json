@@ -5,6 +5,7 @@
         "frontends",
         "goreplay",
         "haproxy",
+        "maxconn",
         "nohup",
         "sprintf",
         "sslv"
